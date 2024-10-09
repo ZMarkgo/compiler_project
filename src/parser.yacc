@@ -6,7 +6,7 @@ extern A_pos pos;
 extern A_program root;
 
 extern int yylex(void);
-extern "C"{
+extern "C" {
 extern void yyerror(const char *s); 
 extern int  yywrap();
 }
@@ -125,13 +125,11 @@ ArithExpr: ArithExpr ADD ArithExpr {
 
 %%
 
-extern "C"{
-void yyerror(const char * s)
-{
+extern "C" {
+void yyerror(const char * s) {
   fprintf(stderr, "%s\n",s);
 }
-int yywrap()
-{
+int yywrap() {
   return(1);
 }
 }
