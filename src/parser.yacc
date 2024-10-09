@@ -131,6 +131,7 @@ extern int  yywrap();
 %type <type> Type
 
 %type <varDeclList> VarDeclList
+%type <varDecl> FieldDecl
 %type <structDef> StructDef
 
 %type <fnDeclStmt> FnDeclStmt
@@ -212,6 +213,7 @@ ArrayExpr: LeftVal LBRACKET NUM RBRACKET {
   $$ = A_ArrayExpr($1->pos, $1, A_IdIndexExpr($3->pos, $3->id));
 } ;
 
+// 负数
 ArithUExpr: SUB ExprUnit %prec NEG {
   $$ = A_ArithUExpr($1, A_neg, $2);
 } ;
@@ -251,8 +253,8 @@ ComExpr: ExprUnit LT ExprUnit {
   $$ = A_ComExpr($1->pos, A_ne, $1, $3);
 } ;
 
-BoolUOpExpr: NOT BoolUnit {
-  $$ = A_BoolUOpExpr($1, A_not, $2);
+BoolUOpExpr: LPAREN NOT BoolUnit  RPAREN{
+  $$ = A_BoolUOpExpr($1, A_not, $3);
 } ;
 
 // Assignment Statements
@@ -329,9 +331,15 @@ Type: INT {
 } ;
 
 // Structure
-VarDeclList: VarDecl {
+FieldDecl: ID COLON Type {
+  $$ = A_VarDecl_Scalar($1->pos, A_VarDeclScalar($1->pos, $1->id, $3));
+} | ArrayExpr COLON Type{
+  $$ = A_VarDecl_Array($1->pos, A_VarDeclArray($1->pos, $1->arr->u.id, $1->idx->u.num, $3));
+} ;
+
+VarDeclList: FieldDecl {
   $$ = A_VarDeclList($1, nullptr);
-} | VarDecl COMMA VarDeclList{
+} | FieldDecl COMMA VarDeclList{
   $$ = A_VarDeclList($1, $3);
 } ;
 
