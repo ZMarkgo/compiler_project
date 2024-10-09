@@ -92,6 +92,11 @@ int calc(const char *s, int len);
     return ID;
 }
 
+/* 初始状态下：匹配任何其他字符都是非法的 */
+<INITIAL>. {
+    printf("Illegal input \"%c\"\n", yytext[0]);
+}
+
 /* 行注释状态：结束 */
 <COMMENT_INLINE>"\n" { col = 1; line++; BEGIN(INITIAL); }
 /* 行注释状态：匹配任意字符 */
