@@ -35,7 +35,6 @@ extern int  yywrap();
   A_rightVal rightVal;
   A_boolExpr boolExpr;
   A_arithBiOpExpr arithBiOpExpr;
-  A_arithUExpr arithUExpr;
   A_fnCall fnCall;
   A_indexExpr indexExpr;
   A_arrayExpr arrayExpr;
@@ -147,7 +146,6 @@ extern int  yywrap();
 %type <pos> ContinueStmt
 %type <pos> BreakStmt
 
-%type <arithUExpr> ArithUExpr
 %type <ifStmt> IfStmt
 %type <whileStmt> WhileStmt
 
@@ -193,6 +191,8 @@ ArithExpr: ArithExpr ADD ArithExpr {
 
 ExprUnit: NUM {
   $$ = A_NumExprUnit($1->pos, $1->num);
+} | SUB NUM %prec NEG {
+  $$ = A_NumExprUnit($1, -($2->num));
 } | ID {
   $$ = A_IdExprUnit($1->pos, $1->id);
 } | LPAREN ArithExpr RPAREN {
@@ -203,19 +203,12 @@ ExprUnit: NUM {
   $$ = A_ArrayExprUnit($1->pos, $1);
 } | MemberExpr {
   $$ = A_MemberExprUnit($1->pos, $1);
-} | ArithUExpr {
-  $$ = A_ArithUExprUnit($1->pos, $1);
 } ;
 
 ArrayExpr: LeftVal LBRACKET NUM RBRACKET {
   $$ = A_ArrayExpr($1->pos, $1, A_NumIndexExpr($3->pos, $3->num));
 } | LeftVal LBRACKET ID RBRACKET {
   $$ = A_ArrayExpr($1->pos, $1, A_IdIndexExpr($3->pos, $3->id));
-} ;
-
-// 负数
-ArithUExpr: SUB ExprUnit %prec NEG {
-  $$ = A_ArithUExpr($1, A_neg, $2);
 } ;
 
 // Condition Expressions
