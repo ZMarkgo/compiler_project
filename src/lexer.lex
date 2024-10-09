@@ -26,7 +26,7 @@ int calc(const char *s, int len);
     col = 1;
     line++;
 }
-<INITIAL>"\t" { col+=4; }
+<INITIAL>"\t" { col+= 4; }
 
 <INITIAL>"+" { yylval.pos = A_Pos(line, col); col++; return ADD; }
 <INITIAL>"-" { yylval.pos = A_Pos(line, col); col++; return SUB; }
