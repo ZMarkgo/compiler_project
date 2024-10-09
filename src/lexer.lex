@@ -8,7 +8,6 @@ int c;
 int calc(const char *s, int len);
 %}
 
-// your lexer
 %s COMMENT_INLINE COMMENT_BLOCK
 
 %%
@@ -92,20 +91,14 @@ int calc(const char *s, int len);
     return ID;
 }
 
-/* 初始状态下：匹配任何其他字符都是非法的 */
 <INITIAL>. {
     printf("Illegal input \"%c\"\n", yytext[0]);
 }
 
-/* 行注释状态：结束 */
 <COMMENT_INLINE>"\n" { col = 1; line++; BEGIN(INITIAL); }
-/* 行注释状态：匹配任意字符 */
 <COMMENT_INLINE>. { col++; }
-/* 块注释状态：结束 */
 <COMMENT_BLOCK>"*/" { col+=2; BEGIN(INITIAL); }
-/* 块注释状态：匹配换行符 */
 <COMMENT_BLOCK>"\n" { col = 1; line++; }
-/* 块注释状态：匹配任意字符 */
 <COMMENT_BLOCK>. { col++; }
 
 %%
