@@ -412,14 +412,14 @@ CallStmt: FnCall SEMICOLON {
 } ;
 
 // Control Flows
-IfStmt: IF LPAREN BoolUnit RPAREN CodeBlock ELSE CodeBlock {
-  $$ = A_IfStmt($1, $3, $5, $7);
-} | IF LPAREN BoolUnit RPAREN CodeBlock {
-  $$ = A_IfStmt($1, $3, $5, nullptr);
+IfStmt: IF BoolUnit CodeBlock ELSE CodeBlock {
+  $$ = A_IfStmt($1, $2, $3, $5);
+} | IF BoolUnit CodeBlock {
+  $$ = A_IfStmt($1, $2, $3, nullptr);
 } ;
 
-WhileStmt: WHILE LPAREN BoolUnit RPAREN CodeBlock {
-  $$ = A_WhileStmt($1, $3, $5);
+WhileStmt: WHILE BoolUnit CodeBlock {
+  $$ = A_WhileStmt($1, $2, $3);
 } ;
 
 %%
