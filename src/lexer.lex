@@ -65,7 +65,7 @@ int calc(const char *s, int len);
 <INITIAL>"while" { yylval.pos = A_Pos(line, col); col+=5; return WHILE; }
 <INITIAL>"continue" { yylval.pos = A_Pos(line, col); col+=8; return CONTINUE; }
 <INITIAL>"break" { yylval.pos = A_Pos(line, col); col+=5; return BREAK; }
-<INITIAL>"ret" { yylval.pos = A_Pos(line, col); col+=6; return RETURN; }
+<INITIAL>"ret" { yylval.pos = A_Pos(line, col); col+=3; return RETURN; }
 
 <INITIAL>"int" { yylval.pos = A_Pos(line, col); col+=3; return INT; }
 
