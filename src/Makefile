@@ -10,6 +10,8 @@ LLFILES = $(patsubst $(TESTCASE_DIR)/%.tea,$(TESTCASE_DIR)/%.ast,$(TESTCASES))
 run: $(patsubst $(TESTCASE_DIR)/%.tea,$(TESTCASE_DIR)/%.ast,$(TESTCASES))
 
 $(TESTCASE_DIR)/%.ast: $(TESTCASE_DIR)/%.tea compiler
+	@echo "------------------------------------------------------------------------------------------------------"
+	@echo "Running test case: $<"
 	@./compiler $< $@
 
 compiler: y.tab.o lex.yy.o TypeCheck.o TeaplAst.o TeaplaAst.o PrintTeaplaAst.o compiler.o 
