@@ -12,6 +12,10 @@ vector<typeMap*> local_token2Type;
 // 当前作用域的token2Type
 typeMap* current_token2Type = &g_token2Type;
 
+// 记录定义过的函数
+functionsVector definedFunctions;
+// 记录当前函数
+string currentFunction = "";
 // 记录函数的参数
 paramMemberMap func2Param;
 // 记录struct的成员
@@ -153,6 +157,30 @@ tc_type check_rightVal(std::ostream& out, aA_rightVal rv) {
     aAType->type = A_dataType::A_nativeTypeKind;
     aAType->u.nativeType = A_nativeType::A_intTypeKind;
     return tc_Type(aAType, 0);
+}
+
+/**
+ * @brief 进入新的作用域
+*/
+void begin_scope(){
+    typeMap* newMap;
+    // 如果当前作用域为空，则新建一个全局作用域
+    // 否则，新建一个当前作用域的子作用域
+    if (local_token2Type.size() == 0)
+        newMap = new typeMap(g_token2Type);
+    else 
+        newMap = new typeMap(*local_token2Type.back());
+    local_token2Type.push_back(newMap);
+    current_token2Type = newMap;
+}
+
+/**
+ * @brief 退出当前作用域
+*/
+void end_scope() {
+    local_token2Type.pop_back();
+    delete current_token2Type;
+    current_token2Type = local_token2Type.size() == 0 ? &g_token2Type : local_token2Type.back();
 }
 
 // public functions 对外接口
@@ -349,22 +377,46 @@ void check_FnDef(std::ostream& out, aA_fnDef fd)
 {
     if (!fd)
         return;
+    // 检查是否重复定义
+    for(string func : definedFunctions){
+        if(func == *fd->fnDecl->id)
+            error_print(out, fd->pos, "Function redefined!");
+    }
     // should match if declared
     check_FnDecl(out, fd->fnDecl);
     // add params to local tokenmap, func params override global ones
     for (aA_varDecl vd : fd->fnDecl->paramDecl->varDecls)
     {
         /* fill code here */
+        if (vd->kind == A_varDeclType::A_varDeclScalarKind)
+            funcparam_token2Type[*vd->u.declScalar->id] = tc_Type(vd);
+        else if (vd->kind == A_varDeclType::A_varDeclArrayKind)
+            funcparam_token2Type[*vd->u.declArray->id] = tc_Type(vd);
     }
 
     /* fill code here */
+    begin_scope();
+    currentFunction = *fd->fnDecl->id;
     for (aA_codeBlockStmt stmt : fd->stmts)
     {
         check_CodeblockStmt(out, stmt);
-        // return value type should match
-        /* fill code here */        
+        /*
+        在check_CodeblockStmt中会调用check_ReturnStmt中检查
+        return value type should match 
+        */
     }
-
+    end_scope();
+    currentFunction = "";
+    // 清除函数参数
+    for (aA_varDecl vd : fd->fnDecl->paramDecl->varDecls)
+    {
+        if (vd->kind == A_varDeclType::A_varDeclScalarKind)
+            funcparam_token2Type.erase(*vd->u.declScalar->id);
+        else if (vd->kind == A_varDeclType::A_varDeclArrayKind)
+            funcparam_token2Type.erase(*vd->u.declArray->id);
+    }
+    // 记录已定义的函数
+    definedFunctions.push_back(*fd->fnDecl->id);
     return;
 }
 

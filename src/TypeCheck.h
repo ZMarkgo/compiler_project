@@ -15,6 +15,7 @@ typedef std::unordered_map<string, tc_type> typeMap;
 // func name to params
 typedef std::unordered_map<string, vector<aA_varDecl>*> paramMemberMap; 
 typedef std::unordered_map<string, int> arrayLengthMap;
+typedef std::vector<string> functionsVector;
 
 void check_Prog(std::ostream& out, aA_program p);
 void check_VarDecl(std::ostream& out, aA_varDeclStmt vd);
