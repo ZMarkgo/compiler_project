@@ -9,11 +9,15 @@ typeMap g_token2Type;
 // local token ids to type, since func param can override global param
 typeMap funcparam_token2Type;
 vector<typeMap*> local_token2Type;
+// 当前作用域的token2Type
+typeMap* current_token2Type = &g_token2Type;
 
-
+// 记录函数的参数
 paramMemberMap func2Param;
+// 记录struct的成员
 paramMemberMap struct2Members;
-
+// 记录数组的长度
+arrayLengthMap array2Len;
 
 // private util functions
 void error_print(std::ostream& out, A_pos p, string info)
@@ -21,7 +25,6 @@ void error_print(std::ostream& out, A_pos p, string info)
     out << "Typecheck error in line " << p->line << ", col " << p->col << ": " << info << std::endl;
     exit(0);
 }
-
 
 void print_token_map(typeMap* map){
     for(auto it = map->begin(); it != map->end(); it++){
@@ -112,8 +115,47 @@ tc_type tc_Type(aA_varDecl vd){
     return nullptr;
 }
 
+/**
+ * @brief 在函数参数列表、符号表中查找id是否存在
+*/
+tc_type get_tc_type(typeMap* typeMap, string id) {
+    if (funcparam_token2Type.find(id) != funcparam_token2Type.end())
+        return funcparam_token2Type[id];
+    if (typeMap->find(id) != typeMap->end())
+        return (*typeMap)[id];
+    return nullptr;
+}
 
-// public functions
+/**
+ * @brief 当结构体类型是structType时，检查是否定义
+ * @return true: 不为structType或者已定义，false: 为structType但未定义
+*/
+bool check_structTypeDefinedWhenIsStructType(std::ostream& out, aA_type t){
+    if(!t)
+        return false;
+    if (t->type != A_dataType::A_structTypeKind)
+        return true;
+    if(struct2Members.find(*t->u.structType) == struct2Members.end()){
+        error_print(out, t->pos, "Undefined struct type!");
+        return false;
+    }
+    return true;
+}
+
+tc_type check_rightVal(std::ostream& out, aA_rightVal rv) {
+    if (!rv)
+        return nullptr;
+    if (rv->kind == A_rightValType::A_arithExprValKind)
+        return check_ArithExpr(out, rv->u.arithExpr);
+    check_BoolExpr(out, rv->u.boolExpr);
+    aA_type aAType = new aA_type_;
+    aAType->pos = rv->pos;
+    aAType->type = A_dataType::A_nativeTypeKind;
+    aAType->u.nativeType = A_nativeType::A_intTypeKind;
+    return tc_Type(aAType, 0);
+}
+
+// public functions 对外接口
 void check_Prog(std::ostream& out, aA_program p)
 {
     for (auto ele : p->programElements)
@@ -147,7 +189,10 @@ void check_Prog(std::ostream& out, aA_program p)
     return;
 }
 
-
+/**
+ * 检查<变量声明、变量定义>语句
+ * 
+*/
 void check_VarDecl(std::ostream& out, aA_varDeclStmt vd)
 {
     if (!vd)
@@ -159,10 +204,26 @@ void check_VarDecl(std::ostream& out, aA_varDeclStmt vd)
         if(vdecl->kind == A_varDeclType::A_varDeclScalarKind){
             name = *vdecl->u.declScalar->id;
             /* fill code here*/
+            // 检查是否重复声明
+            if (get_tc_type(current_token2Type, name) != nullptr)
+                error_print(out, vdecl->pos, "Redeclared variable!");
+            // 检查结构体类型是否定义
+            check_structTypeDefinedWhenIsStructType(out, vdecl->u.declScalar->type);
+            // 添加当前变量到当前作用域
+            current_token2Type->insert({name, tc_Type(vdecl)});
         }else if (vdecl->kind == A_varDeclType::A_varDeclArrayKind){
             name = *vdecl->u.declArray->id;
             /* fill code here*/
-            }
+            // 检查是否重复声明
+            if (get_tc_type(current_token2Type, name) != nullptr)
+                error_print(out, vdecl->pos, "Redeclared variable!");
+            // 检查结构体类型是否定义
+            check_structTypeDefinedWhenIsStructType(out, vdecl->u.declArray->type);
+            // 添加当前变量到当前作用域
+            current_token2Type->insert({name, tc_Type(vdecl)});
+            // 记录数组长度
+            array2Len.insert({name, vdecl->u.declArray->len});
+        }
     }
     else if (vd->kind == A_varDeclStmtType::A_varDefKind){
         // decl and def
@@ -170,9 +231,52 @@ void check_VarDecl(std::ostream& out, aA_varDeclStmt vd)
         if (vdef->kind == A_varDefType::A_varDefScalarKind){
             name = *vdef->u.defScalar->id;
             /* fill code here, allow omited type */
-        }else if (vdef->kind == A_varDefType::A_varDefArrayKind){
+            aA_varDefScalar varDefScalar = vdef->u.defScalar;
+            // 检查是否重复定义
+            if (get_tc_type(current_token2Type, name) != nullptr)
+                error_print(out, varDefScalar->pos, "Redefined variable!");
+            // 检查结构体类型是否定义
+            check_structTypeDefinedWhenIsStructType(out, varDefScalar->type);
+            // 检查右值
+            tc_type t = check_rightVal(out, varDefScalar->val);
+            // 检查是否类型匹配（包括缺省类型）
+            if (varDefScalar->type == nullptr) { // 类型缺省
+                current_token2Type->insert({name, t});
+            } else {
+                if (!comp_tc_type(t, tc_Type(varDefScalar->type, 0)))
+                    error_print(out, varDefScalar->pos, "Type mismatch!");
+                // 添加当前变量到当前作用域
+                current_token2Type->insert({name, tc_Type(varDefScalar->type, 0)});
+            }
+        }else if (vdef->kind == A_varDefType::A_varDefArrayKind){ // 数组定义
             name = *vdef->u.defArray->id;
             /* fill code here, allow omited type */
+            aA_varDefArray varDefArray = vdef->u.defArray;
+            // 检查是否重复定义
+            if (get_tc_type(current_token2Type, name) != nullptr)
+                error_print(out, varDefArray->pos, "Redefined variable!");
+            // 检查结构体类型是否定义
+            check_structTypeDefinedWhenIsStructType(out, varDefArray->type);
+            // 检查数组长度
+            if (varDefArray->len != varDefArray->vals.size())
+                error_print(out, varDefArray->pos, "Array length mismatch!");
+            // 检查是否类型匹配（包括缺省类型）
+            if (varDefArray->type == nullptr) { // 类型缺省
+                tc_type t = check_rightVal(out, varDefArray->vals[0]);
+                // 检查数组元素类型是否匹配
+                for (aA_rightVal rv : varDefArray->vals)
+                    if (!comp_tc_type(check_rightVal(out, rv), t))
+                        error_print(out, rv->pos, "Array element type mismatch!");
+                // 添加当前变量到当前作用域
+                current_token2Type->insert({name, tc_Type(varDefArray->type, 1)});
+            } else {
+                // 检查数组元素类型是否匹配
+                for (aA_rightVal rv : varDefArray->vals)
+                    if (!comp_tc_type(check_rightVal(out, rv), tc_Type(varDefArray->type, 0)))
+                        error_print(out, rv->pos, "Array element type mismatch!");
+                // 添加当前变量到当前作用域
+                current_token2Type->insert({name, tc_Type(varDefArray->type, 1)});
+            }
         }
     }
     return;
