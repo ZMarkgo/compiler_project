@@ -145,15 +145,20 @@ bool check_structTypeDefinedWhenIsStructType(std::ostream& out, aA_type t){
     return true;
 }
 
+/**
+ * @brief 检查右值
+*/
 tc_type check_rightVal(std::ostream& out, aA_rightVal rv) {
     if (rv->kind == A_rightValType::A_arithExprValKind)
         return check_ArithExpr(out, rv->u.arithExpr);
-    check_BoolExpr(out, rv->u.boolExpr);
-    aA_type aAType = new aA_type_;
-    aAType->pos = rv->pos;
-    aAType->type = A_dataType::A_nativeTypeKind;
-    aAType->u.nativeType = A_nativeType::A_intTypeKind;
-    return tc_Type(aAType, 0);
+    else { // A_boolExprValKind
+        check_BoolExpr(out, rv->u.boolExpr);
+        aA_type aAType = new aA_type_;
+        aAType->pos = rv->pos;
+        aAType->type = A_dataType::A_nativeTypeKind;
+        aAType->u.nativeType = A_nativeType::A_intTypeKind;
+        return tc_Type(aAType, 0);
+    }
 }
 
 /**
@@ -381,10 +386,13 @@ void check_FnDef(std::ostream& out, aA_fnDef fd)
     }
     // should match if declared
     check_FnDecl(out, fd->fnDecl);
-    // add params to local tokenmap, func params override global ones
+    // add params to local tokenmap, 函数参数不能和局部变量重复
     for (aA_varDecl vd : fd->fnDecl->paramDecl->varDecls)
     {
         /* fill code here */
+        // 检查是否重复定义
+        if (get_tc_type(current_token2Type, *vd->u.declScalar->id) != nullptr)
+            error_print(out, vd->pos, "Redeclared variable in function param!");
         if (vd->kind == A_varDeclType::A_varDeclScalarKind)
             funcparam_token2Type[*vd->u.declScalar->id] = tc_Type(vd);
         else if (vd->kind == A_varDeclType::A_varDeclArrayKind)
@@ -474,7 +482,7 @@ void check_AssignStmt(std::ostream& out, aA_assignStmt as){
             name = *as->leftVal->u.arrExpr->arr->u.id;
             tc_type leftType = get_tc_type(current_token2Type, name);
             if (leftType == nullptr)
-                error_print(out, as->pos, "Undefined variable!");
+                error_print(out, as->pos, "Undefined variable in array assignment!");
             if (!comp_tc_type(leftType, deduced_type))
                 error_print(out, as->pos, "Type mismatch in array assignment!");
         }
@@ -528,10 +536,10 @@ void check_ArrayExpr(std::ostream& out, aA_arrayExpr ae){
     // check index
     /* fill code here */
     A_indexExprKind indexKind = ae->idx->kind;
-    if (indexKind == A_indexExprKind::A_idIndexKind
-        && get_tc_type(current_token2Type, *ae->idx->u.id) == nullptr) {
-        error_print(out, ae->pos, "Undefined index!");
-    } else {
+    if (indexKind == A_indexExprKind::A_idIndexKind) {
+        if (get_tc_type(current_token2Type, *ae->idx->u.id) == nullptr)
+            error_print(out, ae->pos, "Undefined index variable in array!");
+    } else { // A_numIndexKind
         int index = ae->idx->u.num;
         if (index < 0 || index >= array2Len[name])
             error_print(out, ae->pos, "Index out of range in array!");
@@ -673,8 +681,8 @@ tc_type check_ExprUnit(std::ostream& out, aA_exprUnit eu){
         }
             break;
         case A_exprUnitType::A_fnCallKind:{
-            check_FuncCall(out, eu->u.callExpr);
             // check_FuncCall will check if the function is defined
+            check_FuncCall(out, eu->u.callExpr);
             /* fill code here */
             string func_name = *eu->u.callExpr->fn;
             aA_type funcCall_type = new aA_type_;
@@ -701,7 +709,7 @@ tc_type check_ExprUnit(std::ostream& out, aA_exprUnit eu){
                 array_type->u.nativeType = t->type->u.nativeType;
             else
                 array_type->u.structType = t->type->u.structType;
-            ret = tc_Type(array_type, 0);
+            ret = tc_Type(array_type, 1);
         }
             break;
         case A_exprUnitType::A_memberExprKind:{
@@ -753,14 +761,16 @@ void check_FuncCall(std::ostream& out, aA_fnCall fc){
         error_print(out, fc->pos, "Undefined function!");
         
     // check if parameter list matches
+    // 先检查数量是否匹配
     if (func2Param[func_name]->size() != fc->vals.size())
-        error_print(out, fc->pos, "Function param number mismatch!");
+        error_print(out, fc->pos, "Function param number mismatch in function call!");
+    // 再检查类型是否匹配
     for(int i = 0; i < fc->vals.size(); i++){
         /* fill code here */
-        tc_type paramType = check_rightVal(out, fc->vals[i]);
         tc_type declType = tc_Type(func2Param[func_name]->at(i));
+        tc_type paramType = check_rightVal(out, fc->vals[i]);
         if (!comp_tc_type(declType, paramType))
-            error_print(out, fc->pos, "Function param type mismatch!");
+            error_print(out, fc->vals[i]->pos, "Function param type mismatch in function call!");
     }
     return ;
 }
@@ -792,6 +802,12 @@ void check_CallStmt(std::ostream& out, aA_callStmt cs){
 void check_ReturnStmt(std::ostream& out, aA_returnStmt rs){
     if(!rs)
         return;
+    if (currentFunction.empty())
+        error_print(out, rs->pos, "Return statement not in function!");
+    tc_type funcType = g_token2Type.find(currentFunction)->second;
+    tc_type ret = check_rightVal(out, rs->retVal);
+    if (ret->isVarArrFunc != 0 || !comp_aA_type(ret->type, funcType->type))
+        error_print(out, rs->pos, "Return type mismatch!");
     return;
 }
 
