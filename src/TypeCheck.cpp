@@ -451,25 +451,66 @@ void check_CodeblockStmt(std::ostream& out, aA_codeBlockStmt cs){
     return;
 }
 
-
+// 检查赋值语句
 void check_AssignStmt(std::ostream& out, aA_assignStmt as){
     if(!as)
         return;
     string name;
-    tc_type deduced_type; // deduced type if type is omitted at decl
+     // deduced type if type is omitted at decl
+    tc_type deduced_type = check_rightVal(out, as->rightVal);
     switch (as->leftVal->kind)
     {
         case A_leftValType::A_varValKind:{
             name = *as->leftVal->u.id;
             /* fill code here */
+            tc_type leftType = get_tc_type(current_token2Type, name);
+            if (leftType == nullptr)
+                error_print(out, as->pos, "Undefined variable!");
+            if (leftType->type == nullptr) // 赋值时确定类型 
+                current_token2Type->find(name)->second = deduced_type;
+            else if (!comp_tc_type(leftType, deduced_type))
+                error_print(out, as->pos, "Type mismatch in assignment!");
         }
             break;
         case A_leftValType::A_arrValKind:{
             /* fill code here */
+            name = *as->leftVal->u.arrExpr->arr->u.id;
+            tc_type leftType = get_tc_type(current_token2Type, name);
+            if (leftType == nullptr)
+                error_print(out, as->pos, "Undefined variable!");
+            if (!comp_tc_type(leftType, deduced_type))
+                error_print(out, as->pos, "Type mismatch in array assignment!");
         }
             break;
         case A_leftValType::A_memberValKind:{
             /* fill code here */
+            aA_memberExpr memberExpr = as->leftVal->u.memberExpr;
+            if (memberExpr->structId->kind != A_leftValType::A_varValKind) // 不是变量类型，报错
+                error_print(out, as->pos, "Not a variable type in member assignment!");
+            string structId = *memberExpr->structId->u.id;
+            string memberId = *memberExpr->memberId;
+            tc_type structType = get_tc_type(current_token2Type, structId);
+            if (structType == nullptr)
+                error_print(out, as->pos, "Undefined struct!");
+            if (structType->type->type != A_dataType::A_structTypeKind) // 不是结构体类型，报错
+                error_print(out, as->pos, "Not a struct type in member assignment!");
+            // 检查 member 是否存在
+            bool isExist = false;
+            for (aA_varDecl vd : *struct2Members.find(*structType->type->u.structType)->second) {
+                string varName;
+                if (vd->kind == A_varDeclType::A_varDeclScalarKind)
+                    varName = *vd->u.declScalar->id;
+                else if (vd->kind == A_varDeclType::A_varDeclArrayKind)
+                    varName = *vd->u.declArray->id;
+                if (varName == memberId) {
+                    if (!comp_tc_type(tc_Type(vd), deduced_type))
+                        error_print(out, as->pos, "Type mismatch in member assignment!");
+                    isExist = true;
+                    break;
+                }
+            }
+            if (!isExist)
+                error_print(out, as->pos, "Undefined member!");
         }
             break;
     }
