@@ -1,5 +1,4 @@
 #include "TypeCheck.h"
-
 //global tabels
 //typeMap func2retType; // function name to return type
 
@@ -147,8 +146,6 @@ bool check_structTypeDefinedWhenIsStructType(std::ostream& out, aA_type t){
 }
 
 tc_type check_rightVal(std::ostream& out, aA_rightVal rv) {
-    if (!rv)
-        return nullptr;
     if (rv->kind == A_rightValType::A_arithExprValKind)
         return check_ArithExpr(out, rv->u.arithExpr);
     check_BoolExpr(out, rv->u.boolExpr);
@@ -456,7 +453,7 @@ void check_AssignStmt(std::ostream& out, aA_assignStmt as){
     if(!as)
         return;
     string name;
-     // deduced type if type is omitted at decl
+    // deduced type if type is omitted at decl
     tc_type deduced_type = check_rightVal(out, as->rightVal);
     switch (as->leftVal->kind)
     {
@@ -495,12 +492,13 @@ void check_AssignStmt(std::ostream& out, aA_assignStmt as){
             if (structType->type->type != A_dataType::A_structTypeKind) // 不是结构体类型，报错
                 error_print(out, as->pos, "Not a struct type in member assignment!");
             // 检查 member 是否存在
+            vector<aA_varDecl>* memberDecls = struct2Members.find(*(structType->type->u.structType))->second;
             bool isExist = false;
-            for (aA_varDecl vd : *struct2Members.find(*structType->type->u.structType)->second) {
+            for (aA_varDecl vd : *memberDecls) {
                 string varName;
                 if (vd->kind == A_varDeclType::A_varDeclScalarKind)
                     varName = *vd->u.declScalar->id;
-                else if (vd->kind == A_varDeclType::A_varDeclArrayKind)
+                else
                     varName = *vd->u.declArray->id;
                 if (varName == memberId) {
                     if (!comp_tc_type(tc_Type(vd), deduced_type))
@@ -524,9 +522,20 @@ void check_ArrayExpr(std::ostream& out, aA_arrayExpr ae){
     string name = *ae->arr->u.id;
     // check array name
     /* fill code here */
+    if (get_tc_type(current_token2Type, name) == nullptr)
+        error_print(out, ae->pos, "Undefined array!");
         
     // check index
     /* fill code here */
+    A_indexExprKind indexKind = ae->idx->kind;
+    if (indexKind == A_indexExprKind::A_idIndexKind
+        && get_tc_type(current_token2Type, *ae->idx->u.id) == nullptr) {
+        error_print(out, ae->pos, "Undefined index!");
+    } else {
+        int index = ae->idx->u.num;
+        if (index < 0 || index >= array2Len[name])
+            error_print(out, ae->pos, "Index out of range in array!");
+    }
     return;
 }
 
@@ -538,10 +547,29 @@ tc_type check_MemberExpr(std::ostream& out, aA_memberExpr me){
     string name = *me->structId->u.id;
     // check struct name
     /* fill code here */
-        
+    tc_type structType = get_tc_type(current_token2Type, name);
+    if (structType == nullptr)
+        error_print(out, me->pos, "Undefined struct!");
+    if (structType->type->type != A_dataType::A_structTypeKind) 
+        error_print(out, me->pos, "Not a struct type in member access!");
+
     // check member name
     /* fill code here */
-        
+    string structTypeName = *structType->type->u.structType;
+    vector<aA_varDecl>* memberDecls = struct2Members[structTypeName];
+    for (aA_varDecl vd : *memberDecls) {
+        string varName;
+        if (vd->kind == A_varDeclType::A_varDeclScalarKind)
+            varName = *vd->u.declScalar->id;
+        else
+            varName = *vd->u.declArray->id;
+        if (varName == *me->memberId) {
+            if (vd->kind == A_varDeclType::A_varDeclScalarKind)
+                return tc_Type(vd->u.declScalar->type, 0);
+            else
+                return tc_Type(vd->u.declArray->type, 1);
+        }
+    }    
     return nullptr;
 }
 
@@ -551,16 +579,18 @@ void check_IfStmt(std::ostream& out, aA_ifStmt is){
         return;
     check_BoolUnit(out, is->boolUnit);
     /* fill code here, take care of variable scope */
-
+    begin_scope();
     for(aA_codeBlockStmt s : is->ifStmts){
         check_CodeblockStmt(out, s);
     }
-    
+    end_scope();
     /* fill code here */    
+    begin_scope();
     for(aA_codeBlockStmt s : is->elseStmts){
         check_CodeblockStmt(out, s);
     }
     /* fill code here */
+    end_scope();
     return;
 }
 
@@ -591,6 +621,11 @@ void check_BoolUnit(std::ostream& out, aA_boolUnit bu){
     {
         case A_boolUnitType::A_comOpExprKind:{
             /* fill code here */
+            aA_comExpr comExpr = bu->u.comExpr;
+            tc_type leftType = check_ExprUnit(out, comExpr->left);
+            tc_type rightType = check_ExprUnit(out, comExpr->right);
+            if (!comp_tc_type(leftType, rightType))
+                error_print(out, comExpr->pos, "Type mismatch in comparison operation!");
         }
             break;
         case A_boolUnitType::A_boolExprKind:
@@ -615,6 +650,18 @@ tc_type check_ExprUnit(std::ostream& out, aA_exprUnit eu){
     {
         case A_exprUnitType::A_idExprKind:{
             /* fill code here */
+            string name = *eu->u.id;
+            tc_type t = get_tc_type(current_token2Type, name);
+            if (t == nullptr)
+                error_print(out, eu->pos, "Undefined variable!");
+            aA_type id_type = new aA_type_;
+            id_type->pos = eu->pos;
+            id_type->type = t->type->type;
+            if (id_type->type == A_dataType::A_nativeTypeKind)
+                id_type->u.nativeType = t->type->u.nativeType;
+            else
+                id_type->u.structType = t->type->u.structType;
+            ret = tc_Type(id_type, t->isVarArrFunc);
         }
             break;
         case A_exprUnitType::A_numExprKind:{
@@ -629,11 +676,32 @@ tc_type check_ExprUnit(std::ostream& out, aA_exprUnit eu){
             check_FuncCall(out, eu->u.callExpr);
             // check_FuncCall will check if the function is defined
             /* fill code here */
+            string func_name = *eu->u.callExpr->fn;
+            aA_type funcCall_type = new aA_type_;
+            funcCall_type->pos = eu->pos;
+            funcCall_type->type = g_token2Type[func_name]->type->type;
+            if (funcCall_type->type == A_dataType::A_nativeTypeKind)
+                funcCall_type->u.nativeType = g_token2Type[func_name]->type->u.nativeType;
+            else
+                funcCall_type->u.structType = g_token2Type[func_name]->type->u.structType;
+            ret = tc_Type(funcCall_type, 0);
         }
             break;
         case A_exprUnitType::A_arrayExprKind:{
             check_ArrayExpr(out, eu->u.arrayExpr);
             /* fill code here */
+            aA_type array_type = new aA_type_;
+            array_type->pos = eu->pos;
+
+            if (eu->u.arrayExpr->arr->kind != A_leftValType::A_varValKind)
+                error_print(out, eu->pos, "Not a variable type in array access!");
+            tc_type t = get_tc_type(current_token2Type, *eu->u.arrayExpr->arr->u.id);
+            array_type->type = t->type->type;
+            if (array_type->type == A_dataType::A_nativeTypeKind)
+                array_type->u.nativeType = t->type->u.nativeType;
+            else
+                array_type->u.structType = t->type->u.structType;
+            ret = tc_Type(array_type, 0);
         }
             break;
         case A_exprUnitType::A_memberExprKind:{
@@ -681,11 +749,18 @@ void check_FuncCall(std::ostream& out, aA_fnCall fc){
     // check if function defined
     string func_name = *fc->fn;
     /* fill code here */
+    if (func2Param.find(func_name) == func2Param.end())
+        error_print(out, fc->pos, "Undefined function!");
         
     // check if parameter list matches
+    if (func2Param[func_name]->size() != fc->vals.size())
+        error_print(out, fc->pos, "Function param number mismatch!");
     for(int i = 0; i < fc->vals.size(); i++){
         /* fill code here */
-        
+        tc_type paramType = check_rightVal(out, fc->vals[i]);
+        tc_type declType = tc_Type(func2Param[func_name]->at(i));
+        if (!comp_tc_type(declType, paramType))
+            error_print(out, fc->pos, "Function param type mismatch!");
     }
     return ;
 }
@@ -696,12 +771,12 @@ void check_WhileStmt(std::ostream& out, aA_whileStmt ws){
         return;
     check_BoolUnit(out, ws->boolUnit);
     /* fill code here, take care of variable scope */
-        
+    begin_scope();
     for(aA_codeBlockStmt s : ws->whileStmts){
         check_CodeblockStmt(out, s);
     }
     /* fill code here */
-        
+    end_scope();
     return;
 }
 
