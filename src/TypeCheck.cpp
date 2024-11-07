@@ -471,6 +471,8 @@ void check_AssignStmt(std::ostream& out, aA_assignStmt as){
             tc_type leftType = get_tc_type(current_token2Type, name);
             if (leftType == nullptr)
                 error_print(out, as->pos, "Undefined variable!");
+            if (leftType->isVarArrFunc == 2)
+                error_print(out, as->pos, "Function cannot be assigned!");
             if (leftType->type == nullptr) // 赋值时确定类型 
                 current_token2Type->find(name)->second = deduced_type;
             else if (!comp_tc_type(leftType, deduced_type))
@@ -483,6 +485,8 @@ void check_AssignStmt(std::ostream& out, aA_assignStmt as){
             tc_type leftType = get_tc_type(current_token2Type, name);
             if (leftType == nullptr)
                 error_print(out, as->pos, "Undefined variable in array assignment!");
+            if (leftType->isVarArrFunc == 2)
+                error_print(out, as->pos, "Function cannot be assigned!");
             if (!comp_tc_type(leftType, deduced_type))
                 error_print(out, as->pos, "Type mismatch in array assignment!");
         }
