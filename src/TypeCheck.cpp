@@ -305,11 +305,32 @@ void check_FnDecl(std::ostream& out, aA_fnDecl fd)
     if (func2Param.find(name) != func2Param.end()){
         // is function ret val matches
         /* fill code here */
+        if (!comp_aA_type(get_tc_type(&g_token2Type, name)->type, fd->type))
+            error_print(out, fd->pos, "Function return type mismatch with declaration!");
         // is function params matches decl
         /* fill code here */
+        if (func2Param[name]->size() != fd->paramDecl->varDecls.size())
+            error_print(out, fd->pos, "Function param number mismatch with declaration!");
+        // 检查参数类型是否匹配
+        for (int i = 0; i < fd->paramDecl->varDecls.size(); i++) {
+            A_varDeclType decledfunDeclType = func2Param[name]->at(i)->kind;
+            A_varDeclType toCheckType = fd->paramDecl->varDecls[i]->kind;
+            if (decledfunDeclType != toCheckType)
+                error_print(out, fd->pos, "Function param type mismatch with declaration!");
+            if (decledfunDeclType == A_varDeclType::A_varDeclScalarKind) { 
+                if (!comp_aA_type(func2Param[name]->at(i)->u.declScalar->type, fd->paramDecl->varDecls[i]->u.declScalar->type))
+                    error_print(out, fd->pos, "Function param type mismatch with declaration!");
+            } else if (decledfunDeclType == A_varDeclType::A_varDeclArrayKind) {
+                if (!comp_aA_type(func2Param[name]->at(i)->u.declArray->type, fd->paramDecl->varDecls[i]->u.declArray->type))
+                    error_print(out, fd->pos, "Function param type mismatch with declaration!");
+            }
+        }
+            
     }else{
         // if not defined
         /* fill code here */
+        g_token2Type[name] = tc_Type(fd->type, 2);
+        func2Param[name] = &(fd->paramDecl->varDecls);
     }
     return;
 }
