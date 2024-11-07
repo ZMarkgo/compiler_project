@@ -119,7 +119,7 @@ tc_type tc_Type(aA_varDecl vd){
 }
 
 /**
- * @brief 在函数参数列表、符号表中查找id是否存在
+ * @brief 在函数参数列表、符号表中查找id是否存在，如果存在，则返回类型，否则返回nullptr
 */
 tc_type get_tc_type(typeMap* typeMap, string id) {
     if (funcparam_token2Type.find(id) != funcparam_token2Type.end())
